@@ -1,0 +1,451 @@
+//@version=6
+// ============================================================================
+// Gold Quant Stack - Spot XAUUSD [v6] - MEGA indicator
+// All 5 Gold quants in one script. Auto-adapts by chart timeframe.
+//   M1/M5  -> SCALP : VWAP Z fade + 0930-1000 ET micro momentum
+//   M15/H1 -> DAY   : H1 EMA pullback + NY/LDN ORB + ATR expansion
+//   H4/D1  -> SWING : Donchian 20 breakout + H4 pullback + Real-Yield regime
+// Overlay on all modes: DXY inverse confirm (TVC:DXY).
+//
+// ADVANCE signals: pre-signal fires 1-3 candles early when price enters the
+//   trigger zone (near VWAP Z, near ORB/Donchian edge, near pullback EMA).
+//   Pre-signal draws PROJECTED entry/SL/TP1/TP2 (dotted) + "SOON" label.
+// CONFIRMED signals: on bar CLOSE only (no repaint). Draws R-boxes
+//   (SL red / TP1 green / TP2 teal) + entry line + ratcheting trail line.
+// History markers: triangles = confirmed, diamonds = advance warning.
+// Boxes/lines show ACTIVE signal only. Past signals stay as shapes.
+//
+// Symbols: OANDA:XAUUSD / TVC:GOLD / FX:XAUUSD. Alerts: create alert, pick
+//   condition "Gold Quant Stack" -> "Any alert() function call".
+// Spread filter lives in the MT5 EA (Pine cannot read live spread).
+// Not financial advice.
+// ============================================================================
+indicator("Gold Quant Stack - XAUUSD [v6]", shorttitle="GQS XAU v6", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=500, calc_on_every_tick=true)
+
+// ===== INPUTS =====
+string modeSel    = input.string("Auto", "Mode", options=["Auto", "Scalp", "Day", "Swing"], group="Mode")
+bool   useDXY     = input.bool(true, "Use DXY filter (TVC:DXY)", group="Filters")
+bool   useRegime  = input.bool(true, "Use Real-Yield regime (FRED:DFII10)", group="Filters")
+bool   showPre    = input.bool(true, "Show PRE-signals (advance warning)", group="Display")
+bool   showBoxes  = input.bool(true, "Show TP/SL boxes", group="Display")
+bool   showTrail  = input.bool(true, "Show trail line", group="Display")
+bool   showLevels = input.bool(true, "Show VWAP / ORB / Donchian lines", group="Display")
+bool   showDash   = input.bool(true, "Show dashboard", group="Display")
+int    atrLen     = input.int(14, "ATR length", minval=2, group="Params")
+float  zTrig      = input.float(2.0, "VWAP Z trigger", step=0.1, group="Params")
+float  zPre       = input.float(1.5, "VWAP Z pre-signal", step=0.1, group="Params")
+float  slMult     = input.float(1.5, "SL ATR multiple", step=0.1, group="Params")
+float  tp1R       = input.float(1.5, "TP1 R multiple", step=0.1, group="Params")
+float  tp2R       = input.float(2.0, "TP2 R multiple", step=0.1, group="Params")
+int    boxExtend  = input.int(30, "Projection extend (bars)", minval=5, maxval=200, group="Params")
+
+// ===== MODE (auto by chart TF) =====
+int    tfSec    = timeframe.in_seconds()
+string autoMode = tfSec <= 300 ? "SCALP" : tfSec <= 3600 ? "DAY" : "SWING"
+string MODE     = modeSel == "Auto" ? autoMode : modeSel == "Scalp" ? "SCALP" : modeSel == "Day" ? "DAY" : "SWING"
+
+// ===== CORE DATA =====
+float atr    = ta.atr(atrLen)
+float atrSma = ta.sma(atr, 14)
+bool  atrExp = not na(atr) and not na(atrSma) and atr > atrSma * 1.2
+float ema20  = ta.ema(close, 20)
+float ema50  = ta.ema(close, 50)
+
+// ===== DXY OVERLAY (TVC:DXY) =====
+float dxyC = request.security("TVC:DXY", timeframe.period, close, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float dxyE = ta.ema(dxyC, 20)
+bool dxyOK   = not na(dxyC) and not na(dxyE)
+bool dxyDown = dxyOK and dxyC < dxyE
+bool dxyUp   = dxyOK and dxyC > dxyE
+bool allowLongDXY  = not useDXY or not dxyOK or dxyDown
+bool allowShortDXY = not useDXY or not dxyOK or dxyUp
+
+// ===== REAL YIELD (FRED:DFII10, daily) =====
+float ryRaw = request.security("FRED:DFII10", "D", close, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float ryMA  = ta.sma(ryRaw, 20)
+bool ryNA = na(ryRaw) or na(ryMA)
+bool ryFalling = not ryNA and ryRaw < ryMA
+bool ryRising  = not ryNA and ryRaw > ryMA
+
+// ===== HTF TREND DATA =====
+float h1ema20 = request.security(syminfo.tickerid, "60", ta.ema(close, 20), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float h1ema50 = request.security(syminfo.tickerid, "60", ta.ema(close, 50), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float h4ema20 = request.security(syminfo.tickerid, "240", ta.ema(close, 20), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float h4ema50 = request.security(syminfo.tickerid, "240", ta.ema(close, 50), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float dClose  = request.security(syminfo.tickerid, "D", close, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+float dSma50  = request.security(syminfo.tickerid, "D", ta.sma(close, 50), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+// ===== REGIME (neutral-safe when data missing) =====
+bool dBull = na(dClose) or na(dSma50) or dClose > dSma50
+bool dBear = na(dClose) or na(dSma50) or dClose < dSma50
+bool yBull = ryNA or ryFalling
+bool yBear = ryNA or ryRising
+bool bullRegime = not useRegime or (dBull and yBull)
+bool bearRegime = not useRegime or (dBear and yBear)
+
+// ===== DAILY VWAP =====
+bool  newDay = ta.change(time("D")) != 0
+float typ    = hlc3
+float volF   = nz(float(volume), 1.0)
+var float cumV = na
+var float cumTV = na
+if newDay or na(cumV)
+    cumV := volF
+    cumTV := typ * volF
+else
+    cumV := cumV + volF
+    cumTV := cumTV + typ * volF
+float vwap = cumTV / cumV
+float dev  = na(atr) or atr == 0 ? na : (close - vwap) / atr
+
+// ===== DONCHIAN (prior bands, no repaint) =====
+float donUp20 = ta.highest(high, 20)[1]
+float donLo20 = ta.lowest(low, 20)[1]
+float donUp10 = ta.highest(high, 10)[1]
+float donLo10 = ta.lowest(low, 10)[1]
+
+// ===== SESSION RANGES (America/New_York) =====
+string nyTz = "America/New_York"
+bool newNYDay = ta.change(dayofweek(time, nyTz)) != 0
+
+// NY ORB 0830-0930 ET
+bool inNY = not na(time(timeframe.period, "0830-0930:1234567", nyTz))
+var float nyH = na
+var float nyL = na
+var bool nyBuilt = false
+if newNYDay
+    nyH := na
+    nyL := na
+    nyBuilt := false
+if inNY
+    nyH := na(nyH) ? high : math.max(nyH, high)
+    nyL := na(nyL) ? low : math.min(nyL, low)
+else if not na(nyH) and not nyBuilt
+    nyBuilt := true
+
+// London ORB 0300-0400 ET
+bool inLDN = not na(time(timeframe.period, "0300-0400:1234567", nyTz))
+var float ldnH = na
+var float ldnL = na
+var bool ldnBuilt = false
+if newNYDay
+    ldnH := na
+    ldnL := na
+    ldnBuilt := false
+if inLDN
+    ldnH := na(ldnH) ? high : math.max(ldnH, high)
+    ldnL := na(ldnL) ? low : math.min(ldnL, low)
+else if not na(ldnH) and not ldnBuilt
+    ldnBuilt := true
+
+// Micro 0930-1000 ET (scalp momentum)
+bool inMIC = not na(time(timeframe.period, "0930-1000:1234567", nyTz))
+var float micH = na
+var float micL = na
+var bool micBuilt = false
+if newNYDay
+    micH := na
+    micL := na
+    micBuilt := false
+if inMIC
+    micH := na(micH) ? high : math.max(micH, high)
+    micL := na(micL) ? low : math.min(micL, low)
+else if not na(micH) and not micBuilt
+    micBuilt := true
+
+// ===== LONDON FIX WINDOWS =====
+bool inFix = not na(time(timeframe.period, "1025-1035:1234567", "Europe/London")) or not na(time(timeframe.period, "1455-1505:1234567", "Europe/London"))
+string fixTag = inFix ? " +FIX" : ""
+
+// ===== SIGNALS =====
+bool isClose = barstate.isconfirmed
+
+// -- SCALP: VWAP Z fade --
+bool scalpLongVWAP_raw  = not na(dev) and dev <= -zTrig and close > open and allowLongDXY
+bool scalpShortVWAP_raw = not na(dev) and dev >= zTrig and close < open and allowShortDXY
+bool preLongVWAP  = not na(dev) and dev <= -zPre and dev > -zTrig
+bool preShortVWAP = not na(dev) and dev >= zPre and dev < zTrig
+
+// -- SCALP: micro momentum --
+bool microLong_raw  = micBuilt and not na(micH) and close > micH and atrExp and allowLongDXY
+bool microShort_raw = micBuilt and not na(micL) and close < micL and atrExp and allowShortDXY
+bool preMicroLong  = micBuilt and not na(micH) and not na(atr) and close < micH and micH - close < 0.25 * atr and allowLongDXY
+bool preMicroShort = micBuilt and not na(micL) and not na(atr) and close > micL and close - micL < 0.25 * atr and allowShortDXY
+
+// -- DAY: H1 EMA pullback --
+bool upTrendH1 = not na(h1ema20) and not na(h1ema50) and h1ema20 > h1ema50
+bool dnTrendH1 = not na(h1ema20) and not na(h1ema50) and h1ema20 < h1ema50
+bool dayLongPB_raw  = upTrendH1 and low <= h1ema20 and close > h1ema20 and close > open and allowLongDXY
+bool dayShortPB_raw = dnTrendH1 and high >= h1ema20 and close < h1ema20 and close < open and allowShortDXY
+bool preDayLong  = upTrendH1 and not na(atr) and low > h1ema20 and low - h1ema20 < 0.3 * atr and allowLongDXY
+bool preDayShort = dnTrendH1 and not na(atr) and high < h1ema20 and h1ema20 - high < 0.3 * atr and allowShortDXY
+
+// -- DAY: ORB NY --
+bool orbNYLong_raw  = nyBuilt and not inNY and not na(nyH) and close > nyH and atrExp and allowLongDXY
+bool orbNYShort_raw = nyBuilt and not inNY and not na(nyL) and close < nyL and atrExp and allowShortDXY
+bool preOrbNYLong  = nyBuilt and not inNY and not na(nyH) and not na(atr) and close < nyH and nyH - close < 0.25 * atr and allowLongDXY
+bool preOrbNYShort = nyBuilt and not inNY and not na(nyL) and not na(atr) and close > nyL and close - nyL < 0.25 * atr and allowShortDXY
+
+// -- DAY: ORB London --
+bool orbLDNLong_raw  = ldnBuilt and not inLDN and not na(ldnH) and close > ldnH and atrExp and allowLongDXY
+bool orbLDNShort_raw = ldnBuilt and not inLDN and not na(ldnL) and close < ldnL and atrExp and allowShortDXY
+bool preOrbLDNLong  = ldnBuilt and not inLDN and not na(ldnH) and not na(atr) and close < ldnH and ldnH - close < 0.25 * atr and allowLongDXY
+bool preOrbLDNShort = ldnBuilt and not inLDN and not na(ldnL) and not na(atr) and close > ldnL and close - ldnL < 0.25 * atr and allowShortDXY
+
+// -- SWING: Donchian 20 --
+bool donLong_raw  = not na(donUp20) and close > donUp20 and bullRegime and allowLongDXY
+bool donShort_raw = not na(donLo20) and close < donLo20 and bearRegime and allowShortDXY
+bool preDonLong  = not na(donUp20) and not na(atr) and close < donUp20 and donUp20 - close < 0.5 * atr and bullRegime
+bool preDonShort = not na(donLo20) and not na(atr) and close > donLo20 and close - donLo20 < 0.5 * atr and bearRegime
+
+// -- SWING: H4 pullback --
+bool upH4 = not na(h4ema20) and not na(h4ema50) and h4ema20 > h4ema50
+bool dnH4 = not na(h4ema20) and not na(h4ema50) and h4ema20 < h4ema50
+bool swingLongPB_raw  = bullRegime and upH4 and low <= h4ema20 and close > h4ema20 and close > open and allowLongDXY
+bool swingShortPB_raw = bearRegime and dnH4 and high >= h4ema20 and close < h4ema20 and close < open and allowShortDXY
+bool preSwingLong  = bullRegime and upH4 and not na(atr) and low > h4ema20 and low - h4ema20 < 0.4 * atr
+bool preSwingShort = bearRegime and dnH4 and not na(atr) and high < h4ema20 and h4ema20 - high < 0.4 * atr
+
+// -- MODE gate --
+bool longConf_raw = MODE == "SCALP" ? (scalpLongVWAP_raw or microLong_raw) : MODE == "DAY" ? (dayLongPB_raw or orbNYLong_raw or orbLDNLong_raw) : (donLong_raw or swingLongPB_raw)
+bool shortConf_raw = MODE == "SCALP" ? (scalpShortVWAP_raw or microShort_raw) : MODE == "DAY" ? (dayShortPB_raw or orbNYShort_raw or orbLDNShort_raw) : (donShort_raw or swingShortPB_raw)
+bool longConf  = longConf_raw and isClose and not na(atr)
+bool shortConf = shortConf_raw and isClose and not na(atr)
+
+bool preLong  = showPre and (MODE == "SCALP" ? (preLongVWAP or preMicroLong) : MODE == "DAY" ? (preDayLong or preOrbNYLong or preOrbLDNLong) : (preDonLong or preSwingLong))
+bool preShort = showPre and (MODE == "SCALP" ? (preShortVWAP or preMicroShort) : MODE == "DAY" ? (preDayShort or preOrbNYShort or preOrbLDNShort) : (preDonShort or preSwingShort))
+bool preLongEdge  = preLong and not preLong[1]
+bool preShortEdge = preShort and not preShort[1]
+
+string longName = MODE == "SCALP" ? (scalpLongVWAP_raw ? "VWAP FADE L" + fixTag : "MICRO BRK L") : MODE == "DAY" ? (dayLongPB_raw ? "H1 PB L" : orbNYLong_raw ? "NY ORB L" : orbLDNLong_raw ? "LDN ORB L" : "DAY L") : (donLong_raw ? "DON20 L" : swingLongPB_raw ? "H4 PB L" : "SWING L")
+string shortName = MODE == "SCALP" ? (scalpShortVWAP_raw ? "VWAP FADE S" + fixTag : "MICRO BRK S") : MODE == "DAY" ? (dayShortPB_raw ? "H1 PB S" : orbNYShort_raw ? "NY ORB S" : orbLDNShort_raw ? "LDN ORB S" : "DAY S") : (donShort_raw ? "DON20 S" : swingShortPB_raw ? "H4 PB S" : "SWING S")
+
+// ===== TP/SL + TRAIL ENGINE =====
+var int   sigDir   = 0
+var float sigEntry = na
+var float sigSL    = na
+var float sigTP1   = na
+var float sigTP2   = na
+var float sigTrail = na
+var int   sigBar   = 0
+
+float structSLLong  = MODE == "DAY" ? (orbNYLong_raw ? nyL : orbLDNLong_raw ? ldnL : h1ema50) : MODE == "SWING" ? donLo10 : na
+float structSLShort = MODE == "DAY" ? (orbNYShort_raw ? nyH : orbLDNShort_raw ? ldnH : h1ema50) : MODE == "SWING" ? donUp10 : na
+
+if longConf or shortConf
+    sigDir := longConf ? 1 : -1
+    sigEntry := close
+    float atrSL = slMult * atr
+    if sigDir == 1
+        float slR = sigEntry - atrSL
+        float slS = nz(structSLLong, slR)
+        float slCand = math.min(slR, slS)
+        float slCap = sigEntry - 3.0 * atr
+        sigSL := math.max(slCand, slCap)
+        float r = sigEntry - sigSL
+        sigTP1 := sigEntry + tp1R * r
+        sigTP2 := sigEntry + tp2R * r
+        sigTrail := nz(donLo10, sigEntry - 3.0 * atr)
+    else
+        float slR = sigEntry + atrSL
+        float slS = nz(structSLShort, slR)
+        float slCand = math.max(slR, slS)
+        float slCap = sigEntry + 3.0 * atr
+        sigSL := math.min(slCand, slCap)
+        float r = sigSL - sigEntry
+        sigTP1 := sigEntry - tp1R * r
+        sigTP2 := sigEntry - tp2R * r
+        sigTrail := nz(donUp10, sigEntry + 3.0 * atr)
+    sigBar := bar_index
+
+// Trail ratchet (never moves backwards)
+if sigDir == 1 and not na(sigTrail) and not na(close)
+    float tDon = nz(donLo10, sigEntry - 3.0 * atr)
+    float tEma = nz(ema50, sigEntry - 3.0 * atr)
+    float tAtr = sigEntry - 3.0 * atr
+    float newTrail = math.max(tDon, math.max(tEma, tAtr))
+    if newTrail > sigTrail and newTrail < close
+        sigTrail := newTrail
+if sigDir == -1 and not na(sigTrail) and not na(close)
+    float tDon = nz(donUp10, sigEntry + 3.0 * atr)
+    float tEma = nz(ema50, sigEntry + 3.0 * atr)
+    float tAtr = sigEntry + 3.0 * atr
+    float newTrail = math.min(tDon, math.min(tEma, tAtr))
+    if newTrail < sigTrail and newTrail > close
+        sigTrail := newTrail
+
+// Invalidate on SL/TP2 hit or expiry (100 bars)
+if sigDir != 0 and sigBar != 0 and not na(sigSL) and not na(sigTP2)
+    bool hitSL = sigDir == 1 ? low <= sigSL : high >= sigSL
+    bool hitTP2 = sigDir == 1 ? high >= sigTP2 : low <= sigTP2
+    bool expired = bar_index - sigBar > 100
+    if hitSL or hitTP2 or expired
+        sigDir := 0
+
+// ===== CONFIRMED DRAWINGS (active signal only) =====
+var box   bxSL    = na
+var box   bxTP1   = na
+var box   bxTP2   = na
+var line  lnEntry = na
+var line  lnTrail = na
+var label lbSig   = na
+
+if (longConf or shortConf) and showBoxes
+    if not na(bxSL)
+        box.delete(bxSL)
+        bxSL := na
+    if not na(bxTP1)
+        box.delete(bxTP1)
+        bxTP1 := na
+    if not na(bxTP2)
+        box.delete(bxTP2)
+        bxTP2 := na
+    if not na(lnEntry)
+        line.delete(lnEntry)
+        lnEntry := na
+    float topSL = sigDir == 1 ? sigEntry : sigSL
+    float botSL = sigDir == 1 ? sigSL : sigEntry
+    float topT1 = sigDir == 1 ? sigTP1 : sigEntry
+    float botT1 = sigDir == 1 ? sigEntry : sigTP1
+    float topT2 = sigDir == 1 ? sigTP2 : sigTP1
+    float botT2 = sigDir == 1 ? sigTP1 : sigTP2
+    bxSL := box.new(left=bar_index, top=topSL, right=bar_index + boxExtend, bottom=botSL, border_color=color.red, bgcolor=color.new(color.red, 85), extend=extend.right)
+    bxTP1 := box.new(left=bar_index, top=topT1, right=bar_index + boxExtend, bottom=botT1, border_color=color.green, bgcolor=color.new(color.green, 85), extend=extend.right)
+    bxTP2 := box.new(left=bar_index, top=topT2, right=bar_index + boxExtend, bottom=botT2, border_color=color.teal, bgcolor=color.new(color.teal, 85), extend=extend.right)
+    lnEntry := line.new(x1=bar_index, y1=sigEntry, x2=bar_index + 1, y2=sigEntry, extend=extend.right, color=color.blue, style=line.style_dashed, width=1)
+
+if (longConf or shortConf) and showTrail
+    if not na(lnTrail)
+        line.delete(lnTrail)
+        lnTrail := na
+    lnTrail := line.new(x1=bar_index, y1=sigTrail, x2=bar_index + boxExtend, y2=sigTrail, extend=extend.right, color=color.orange, style=line.style_solid, width=2)
+
+if sigDir != 0 and showTrail and not na(lnTrail) and not na(sigTrail)
+    line.set_y1(lnTrail, sigTrail)
+    line.set_y2(lnTrail, sigTrail)
+    line.set_x2(lnTrail, bar_index + boxExtend)
+
+if longConf or shortConf
+    if not na(lbSig)
+        label.delete(lbSig)
+        lbSig := na
+    string nm = sigDir == 1 ? longName : shortName
+    string txt = nm + "\nE " + str.tostring(sigEntry, format.mintick) + "  SL " + str.tostring(sigSL, format.mintick) + "\nTP1 " + str.tostring(sigTP1, format.mintick) + "  TP2 " + str.tostring(sigTP2, format.mintick)
+    lbSig := label.new(x=bar_index, y=sigDir == 1 ? low : high, text=txt, style=sigDir == 1 ? label.style_label_up : label.style_label_down, color=sigDir == 1 ? color.new(color.green, 0) : color.new(color.red, 0), textcolor=color.white, size=size.small)
+
+// ===== PRE-SIGNAL (ADVANCE) LEVELS + PROJECTION =====
+float scalpPreL = (preMicroLong and not na(micH)) ? micH : vwap - zTrig * atr
+float scalpPreS = (preMicroShort and not na(micL)) ? micL : vwap + zTrig * atr
+float dayPreL = (preOrbNYLong and not na(nyH)) ? nyH : (preOrbLDNLong and not na(ldnH)) ? ldnH : h1ema20
+float dayPreS = (preOrbNYShort and not na(nyL)) ? nyL : (preOrbLDNShort and not na(ldnL)) ? ldnL : h1ema20
+float swingPreL = (preDonLong and not na(donUp20)) ? donUp20 : h4ema20
+float swingPreS = (preDonShort and not na(donLo20)) ? donLo20 : h4ema20
+float preLongLevel = MODE == "SCALP" ? scalpPreL : MODE == "DAY" ? dayPreL : swingPreL
+float preShortLevel = MODE == "SCALP" ? scalpPreS : MODE == "DAY" ? dayPreS : swingPreS
+
+int   preDir   = preLong and not preShort ? 1 : preShort and not preLong ? -1 : 0
+float preEntry = preDir == 1 ? preLongLevel : preDir == -1 ? preShortLevel : na
+float preSL  = preDir == 1 ? preEntry - slMult * atr : preDir == -1 ? preEntry + slMult * atr : na
+float preTP1 = preDir == 1 ? preEntry + tp1R * slMult * atr : preDir == -1 ? preEntry - tp1R * slMult * atr : na
+float preTP2 = preDir == 1 ? preEntry + tp2R * slMult * atr : preDir == -1 ? preEntry - tp2R * slMult * atr : na
+
+var label lbPre = na
+var line lnPreE = na
+var line lnPreS = na
+var line lnPreT1 = na
+var line lnPreT2 = na
+var int preBar = 0
+
+if (preLongEdge or preShortEdge) and preDir != 0 and not na(preEntry) and not na(atr)
+    if not na(lbPre)
+        label.delete(lbPre)
+        lbPre := na
+    if not na(lnPreE)
+        line.delete(lnPreE)
+        lnPreE := na
+    if not na(lnPreS)
+        line.delete(lnPreS)
+        lnPreS := na
+    if not na(lnPreT1)
+        line.delete(lnPreT1)
+        lnPreT1 := na
+    if not na(lnPreT2)
+        line.delete(lnPreT2)
+        lnPreT2 := na
+    string ptxt = (preDir == 1 ? "LONG" : "SHORT") + " SOON @ " + str.tostring(preEntry, format.mintick) + "\nSL " + str.tostring(preSL, format.mintick) + "  TP1 " + str.tostring(preTP1, format.mintick) + "  TP2 " + str.tostring(preTP2, format.mintick)
+    lbPre := label.new(x=bar_index, y=preDir == 1 ? low : high, text=ptxt, style=preDir == 1 ? label.style_label_up : label.style_label_down, color=color.new(color.orange, 0), textcolor=color.white, size=size.small)
+    lnPreE := line.new(x1=bar_index, y1=preEntry, x2=bar_index + 1, y2=preEntry, extend=extend.right, color=color.new(color.blue, 20), style=line.style_dotted, width=1)
+    lnPreS := line.new(x1=bar_index, y1=preSL, x2=bar_index + 1, y2=preSL, extend=extend.right, color=color.new(color.red, 20), style=line.style_dotted, width=1)
+    lnPreT1 := line.new(x1=bar_index, y1=preTP1, x2=bar_index + 1, y2=preTP1, extend=extend.right, color=color.new(color.green, 20), style=line.style_dotted, width=1)
+    lnPreT2 := line.new(x1=bar_index, y1=preTP2, x2=bar_index + 1, y2=preTP2, extend=extend.right, color=color.new(color.teal, 20), style=line.style_dotted, width=1)
+    preBar := bar_index
+
+// Clear pre drawings on confirm or after 15 bars idle
+bool preIdle = preDir == 0 and preBar != 0 and bar_index - preBar > 15
+if longConf or shortConf or preIdle
+    if not na(lbPre)
+        label.delete(lbPre)
+        lbPre := na
+    if not na(lnPreE)
+        line.delete(lnPreE)
+        lnPreE := na
+    if not na(lnPreS)
+        line.delete(lnPreS)
+        lnPreS := na
+    if not na(lnPreT1)
+        line.delete(lnPreT1)
+        lnPreT1 := na
+    if not na(lnPreT2)
+        line.delete(lnPreT2)
+        lnPreT2 := na
+    if preIdle
+        preBar := 0
+
+// ===== PLOTS =====
+plot(showLevels ? vwap : na, "VWAP", color.purple, 1)
+plot(showLevels ? ema20 : na, "EMA20", color.blue, 1)
+plot(showLevels ? ema50 : na, "EMA50", color.orange, 1)
+plot(showLevels and MODE == "SWING" ? donUp20 : na, "DON20 U", color.teal, 1, plot.style_linebr)
+plot(showLevels and MODE == "SWING" ? donLo20 : na, "DON20 L", color.teal, 1, plot.style_linebr)
+plot(showLevels and (MODE == "DAY" or MODE == "SCALP") and nyBuilt ? nyH : na, "NY ORB H", color.new(color.green, 0), 1, plot.style_linebr)
+plot(showLevels and (MODE == "DAY" or MODE == "SCALP") and nyBuilt ? nyL : na, "NY ORB L", color.new(color.red, 0), 1, plot.style_linebr)
+plot(showLevels and MODE == "DAY" and ldnBuilt ? ldnH : na, "LDN ORB H", color.new(color.green, 60), 1, plot.style_linebr)
+plot(showLevels and MODE == "DAY" and ldnBuilt ? ldnL : na, "LDN ORB L", color.new(color.red, 60), 1, plot.style_linebr)
+
+plotshape(longConf, title="Long", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), size=size.small, text="L", textcolor=color.white)
+plotshape(shortConf, title="Short", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), size=size.small, text="S", textcolor=color.white)
+plotshape(preLongEdge, title="Pre-Long", style=shape.diamond, location=location.belowbar, color=color.new(color.orange, 0), size=size.tiny, text="SOON")
+plotshape(preShortEdge, title="Pre-Short", style=shape.diamond, location=location.abovebar, color=color.new(color.orange, 0), size=size.tiny, text="SOON")
+
+bgcolor(inNY ? color.new(color.blue, 92) : na, title="NY ORB window")
+bgcolor(inFix ? color.new(color.purple, 88) : na, title="Fix window")
+
+// ===== DASHBOARD =====
+var table dash = table.new(position.top_right, 2, 6, border_width=1, border_color=color.gray)
+if showDash and barstate.islast
+    string regimeTxt = bullRegime and bearRegime ? "NEUTRAL" : bullRegime ? "BULL" : bearRegime ? "BEAR" : "MIXED-SKIP"
+    color regimeBg = bullRegime and not bearRegime ? color.new(color.green, 80) : bearRegime and not bullRegime ? color.new(color.red, 80) : color.new(color.gray, 80)
+    string dxyTxt = not dxyOK ? "NO DATA" : dxyDown ? "DOWN pro-Gold" : dxyUp ? "UP anti-Gold" : "FLAT"
+    string atrTxt = na(atr) ? "n/a" : str.tostring(atr, format.mintick)
+    string sigTxt = sigDir == 1 ? "LONG E " + str.tostring(sigEntry, format.mintick) + " SL " + str.tostring(sigSL, format.mintick) : sigDir == -1 ? "SHORT E " + str.tostring(sigEntry, format.mintick) + " SL " + str.tostring(sigSL, format.mintick) : "FLAT"
+    string preTxt = preDir == 0 ? "--" : na(preEntry) ? (preDir == 1 ? "LONG forming" : "SHORT forming") : (preDir == 1 ? "LONG SOON @ " + str.tostring(preEntry, format.mintick) : "SHORT SOON @ " + str.tostring(preEntry, format.mintick))
+    table.cell(dash, 0, 0, "GQS " + MODE, text_color=color.white, bgcolor=color.new(color.blue, 0), text_size=size.small)
+    table.cell(dash, 1, 0, syminfo.ticker + " " + timeframe.period, text_color=color.white, bgcolor=color.new(color.blue, 0), text_size=size.small)
+    table.cell(dash, 0, 1, "Regime", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 1, 1, regimeTxt, text_color=color.white, bgcolor=regimeBg, text_size=size.small)
+    table.cell(dash, 0, 2, "DXY", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 1, 2, dxyTxt, text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 0, 3, "ATR", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 1, 3, atrTxt, text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 0, 4, "Signal", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 1, 4, sigTxt, text_color=color.white, bgcolor=sigDir == 1 ? color.new(color.green, 20) : sigDir == -1 ? color.new(color.red, 20) : color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 0, 5, "Advance", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 1, 5, preTxt, text_color=color.white, bgcolor=preDir != 0 ? color.new(color.orange, 20) : color.new(color.black, 0), text_size=size.small)
+
+// ===== ALERTS (TV alert dialog -> "Any alert() function call") =====
+if longConf
+    alert("[GQS-" + MODE + "] LONG " + longName + " | E " + str.tostring(sigEntry, format.mintick) + " SL " + str.tostring(sigSL, format.mintick) + " TP1 " + str.tostring(sigTP1, format.mintick) + " TP2 " + str.tostring(sigTP2, format.mintick) + " Trail " + str.tostring(sigTrail, format.mintick), alert.freq_once_per_bar_close)
+if shortConf
+    alert("[GQS-" + MODE + "] SHORT " + shortName + " | E " + str.tostring(sigEntry, format.mintick) + " SL " + str.tostring(sigSL, format.mintick) + " TP1 " + str.tostring(sigTP1, format.mintick) + " TP2 " + str.tostring(sigTP2, format.mintick) + " Trail " + str.tostring(sigTrail, format.mintick), alert.freq_once_per_bar_close)
+if (preLongEdge or preShortEdge) and preDir != 0 and not na(preEntry)
+    alert("[GQS-" + MODE + "] ADVANCE " + (preDir == 1 ? "LONG" : "SHORT") + " SOON @ " + str.tostring(preEntry, format.mintick) + " projSL " + str.tostring(preSL, format.mintick) + " projTP1 " + str.tostring(preTP1, format.mintick) + " projTP2 " + str.tostring(preTP2, format.mintick), alert.freq_once_per_bar)
