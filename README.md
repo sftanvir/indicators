@@ -155,6 +155,7 @@ File: `pine/gold_quant_stack.pine` — mega-script, all 5 quants in one. `//@ver
 - Auto mode by chart TF: M1/M5 = SCALP (VWAP Z fade + 0930-1000 ET micro momentum), M15/H1 = DAY (H1 pullback + NY/LDN ORB), H4/D1 = SWING (Donchian 20 + H4 pullback + Real-Yield regime). Manual override in Inputs.
 - Advance: orange diamond + "SOON" label with PROJECTED entry/SL/TP1/TP2 (dotted lines), fires 1-3 candles before trigger zone break.
 - Confirmed: on bar CLOSE only (no repaint). Triangle + label with E/SL/TP1/TP2, R-boxes (SL red / TP1 green / TP2 teal), dashed blue entry line, orange ratcheting trail line (Donchian 10 / EMA50 / 3xATR).
+- Easy English on-chart: every box and line carries its meaning (SL stop, TP1/TP2 targets, VWAP fair price, range breaks, trail guard, window warnings). Toggle: Inputs → Display → "Explain every line (easy English)". Shapes now read BUY / SELL / SOON.
 - Overlay: DXY inverse confirm (TVC:DXY) on every signal. Regime: FRED:DFII10 + Daily 50 SMA. Dashboard (movable: Inputs → Panel position → Top/Bottom Left/Right): mode, regime, DXY, ATR, active signal, advance state, Quant row.
 - Load: TradingView → Pine Editor → paste file → Add to chart on OANDA:XAUUSD / TVC:GOLD / FX:XAUUSD. Alerts: create alert → condition "Gold Quant Stack - XAUUSD [Quant Tanvir] [v6]" → "Any alert() function call". Bodies already include E/SL/TP1/TP2/trail.
 - Note: spread filter lives in the MT5 EA (Pine cannot read live spread). Keep $0.35 spread rule manually on scalps.
@@ -184,7 +185,7 @@ Change it anytime: indicator gear icon → Inputs → Panel position → Top Lef
 **Step 1 — SOON (orange diamond + orange label + dotted lines). PREPARE.**
 Price entered the trigger zone: stretched far from VWAP, near the ORB/Donchian edge, or near the pullback EMA. Dotted lines show PROJECTED entry / SL / TP1 / TP2 *if* it confirms. Your job: check spread (scalps: under $0.35), check the news clock (no CPI/NFP/FOMC within 15 min), decide risk %. Do not enter.
 
-**Step 2 — L / S triangle (green/red label + solid boxes). EXECUTE on the CLOSE.**
+**Step 2 — BUY / SELL triangle (green/red label + solid boxes). EXECUTE on the CLOSE.**
 A bar CLOSED through the trigger. Entry = market on close, or limit at the blue dashed entry line. The label prints exact E / SL / TP1 / TP2. One signal = one trade; a new signal replaces the old boxes.
 
 **Step 3 — Manage by color.**

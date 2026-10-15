@@ -33,6 +33,7 @@ bool   showTrail  = input.bool(true, "Show trail line", group="Display")
 bool   showLevels = input.bool(true, "Show VWAP / ORB / Donchian lines", group="Display")
 bool   showDash   = input.bool(true, "Show dashboard", group="Display")
 string panelPos   = input.string("Top Right", "Panel position", options=["Top Left", "Top Right", "Bottom Left", "Bottom Right"], group="Display")
+bool   showExplain = input.bool(true, "Explain every line (easy English)", group="Display")
 int    atrLen     = input.int(14, "ATR length", minval=2, group="Params")
 float  zTrig      = input.float(2.0, "VWAP Z trigger", step=0.1, group="Params")
 float  zPre       = input.float(1.5, "VWAP Z pre-signal", step=0.1, group="Params")
@@ -311,9 +312,9 @@ if (longConf or shortConf) and showBoxes
     float botT1 = sigDir == 1 ? sigEntry : sigTP1
     float topT2 = sigDir == 1 ? sigTP2 : sigTP1
     float botT2 = sigDir == 1 ? sigTP1 : sigTP2
-    bxSL := box.new(left=bar_index, top=topSL, right=bar_index + boxExtend, bottom=botSL, border_color=color.red, bgcolor=color.new(color.red, 85), extend=extend.right)
-    bxTP1 := box.new(left=bar_index, top=topT1, right=bar_index + boxExtend, bottom=botT1, border_color=color.green, bgcolor=color.new(color.green, 85), extend=extend.right)
-    bxTP2 := box.new(left=bar_index, top=topT2, right=bar_index + boxExtend, bottom=botT2, border_color=color.teal, bgcolor=color.new(color.teal, 85), extend=extend.right)
+    bxSL := box.new(left=bar_index, top=topSL, right=bar_index + boxExtend, bottom=botSL, border_color=color.red, bgcolor=color.new(color.red, 85), extend=extend.right, text=showExplain ? "SL: STOP here if wrong (max loss)" : "", text_halign=text.align_center, text_valign=text.align_center, text_size=size.tiny, text_color=color.white)
+    bxTP1 := box.new(left=bar_index, top=topT1, right=bar_index + boxExtend, bottom=botT1, border_color=color.green, bgcolor=color.new(color.green, 85), extend=extend.right, text=showExplain ? "TP1: bank half profit here (1.5R)" : "", text_halign=text.align_center, text_valign=text.align_center, text_size=size.tiny, text_color=color.white)
+    bxTP2 := box.new(left=bar_index, top=topT2, right=bar_index + boxExtend, bottom=botT2, border_color=color.teal, bgcolor=color.new(color.teal, 85), extend=extend.right, text=showExplain ? "TP2: final target, exit rest (2R)" : "", text_halign=text.align_center, text_valign=text.align_center, text_size=size.tiny, text_color=color.white)
     lnEntry := line.new(x1=bar_index, y1=sigEntry, x2=bar_index + 1, y2=sigEntry, extend=extend.right, color=color.blue, style=line.style_dashed, width=1)
 
 if (longConf or shortConf) and showTrail
@@ -332,7 +333,7 @@ if longConf or shortConf
         label.delete(lbSig)
         lbSig := na
     string nm = sigDir == 1 ? longName : shortName
-    string txt = nm + "\nE " + str.tostring(sigEntry, format.mintick) + "  SL " + str.tostring(sigSL, format.mintick) + "\nTP1 " + str.tostring(sigTP1, format.mintick) + "  TP2 " + str.tostring(sigTP2, format.mintick)
+    string txt = nm + "\nE " + str.tostring(sigEntry, format.mintick) + "  SL " + str.tostring(sigSL, format.mintick) + "\nTP1 " + str.tostring(sigTP1, format.mintick) + "  TP2 " + str.tostring(sigTP2, format.mintick) + (showExplain ? "\nLive: red = loss zone, green/teal = targets" : "")
     lbSig := label.new(x=bar_index, y=sigDir == 1 ? low : high, text=txt, style=sigDir == 1 ? label.style_label_up : label.style_label_down, color=sigDir == 1 ? color.new(color.green, 0) : color.new(color.red, 0), textcolor=color.white, size=size.small)
 
 // ===== PRE-SIGNAL (ADVANCE) LEVELS + PROJECTION =====
@@ -374,7 +375,7 @@ if (preLongEdge or preShortEdge) and preDir != 0 and not na(preEntry) and not na
     if not na(lnPreT2)
         line.delete(lnPreT2)
         lnPreT2 := na
-    string ptxt = (preDir == 1 ? "LONG" : "SHORT") + " SOON @ " + str.tostring(preEntry, format.mintick) + "\nSL " + str.tostring(preSL, format.mintick) + "  TP1 " + str.tostring(preTP1, format.mintick) + "  TP2 " + str.tostring(preTP2, format.mintick)
+    string ptxt = (preDir == 1 ? "LONG" : "SHORT") + " SOON @ " + str.tostring(preEntry, format.mintick) + "\nSL " + str.tostring(preSL, format.mintick) + "  TP1 " + str.tostring(preTP1, format.mintick) + "  TP2 " + str.tostring(preTP2, format.mintick) + (showExplain ? "\nWarning only: wait for the triangle" : "")
     lbPre := label.new(x=bar_index, y=preDir == 1 ? low : high, text=ptxt, style=preDir == 1 ? label.style_label_up : label.style_label_down, color=color.new(color.orange, 0), textcolor=color.white, size=size.small)
     lnPreE := line.new(x1=bar_index, y1=preEntry, x2=bar_index + 1, y2=preEntry, extend=extend.right, color=color.new(color.blue, 20), style=line.style_dotted, width=1)
     lnPreS := line.new(x1=bar_index, y1=preSL, x2=bar_index + 1, y2=preSL, extend=extend.right, color=color.new(color.red, 20), style=line.style_dotted, width=1)
@@ -403,6 +404,100 @@ if longConf or shortConf or preIdle
     if preIdle
         preBar := 0
 
+// ===== EASY-ENGLISH LINE LABELS (follow the last bar) =====
+var label lbVwap = na
+if showExplain and showLevels and not na(vwap)
+    if na(lbVwap)
+        lbVwap := label.new(x=bar_index, y=vwap, text="VWAP = fair average price today. Far away = stretched.", style=label.style_label_right, color=color.new(color.purple, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbVwap, bar_index, vwap)
+else if not na(lbVwap)
+    label.delete(lbVwap)
+    lbVwap := na
+
+var label lbTrend = na
+if showExplain and showLevels and not na(ema20)
+    if na(lbTrend)
+        lbTrend := label.new(x=bar_index, y=ema20, text="Trend lines: price above both = up. Below both = down.", style=label.style_label_right, color=color.new(color.blue, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbTrend, bar_index, ema20)
+else if not na(lbTrend)
+    label.delete(lbTrend)
+    lbTrend := na
+
+float nyMid = (not na(nyH) and not na(nyL)) ? (nyH + nyL) / 2 : na
+var label lbNY = na
+if showExplain and showLevels and nyBuilt and not na(nyMid)
+    if na(lbNY)
+        lbNY := label.new(x=bar_index, y=nyMid, text="NY first-hour range. Break + push = day trend.", style=label.style_label_right, color=color.new(color.green, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbNY, bar_index, nyMid)
+else if not na(lbNY)
+    label.delete(lbNY)
+    lbNY := na
+
+float ldnMid = (not na(ldnH) and not na(ldnL)) ? (ldnH + ldnL) / 2 : na
+var label lbLDN = na
+if showExplain and showLevels and MODE == "DAY" and ldnBuilt and not na(ldnMid)
+    if na(lbLDN)
+        lbLDN := label.new(x=bar_index, y=ldnMid, text="London first-hour range. Break = morning trend.", style=label.style_label_right, color=color.new(color.gray, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbLDN, bar_index, ldnMid)
+else if not na(lbLDN)
+    label.delete(lbLDN)
+    lbLDN := na
+
+float donMid = (not na(donUp20) and not na(donLo20)) ? (donUp20 + donLo20) / 2 : na
+var label lbDON = na
+if showExplain and showLevels and MODE == "SWING" and not na(donMid)
+    if na(lbDON)
+        lbDON := label.new(x=bar_index, y=donMid, text="20-day highest/lowest. Daily close outside = new leg.", style=label.style_label_right, color=color.new(color.teal, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbDON, bar_index, donMid)
+else if not na(lbDON)
+    label.delete(lbDON)
+    lbDON := na
+
+var label lbEntry = na
+if showExplain and showBoxes and not na(lnEntry) and not na(sigEntry)
+    if na(lbEntry)
+        lbEntry := label.new(x=bar_index, y=sigEntry, text="ENTRY = your fill price (blue dashed line).", style=label.style_label_right, color=color.new(color.blue, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbEntry, bar_index, sigEntry)
+else if not na(lbEntry)
+    label.delete(lbEntry)
+    lbEntry := na
+
+var label lbTrail = na
+if showExplain and showTrail and not na(lnTrail) and not na(sigTrail)
+    if na(lbTrail)
+        lbTrail := label.new(x=bar_index, y=sigTrail, text="TRAIL = profit guard (orange). Price returns here = exit.", style=label.style_label_right, color=color.new(color.orange, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbTrail, bar_index, sigTrail)
+else if not na(lbTrail)
+    label.delete(lbTrail)
+    lbTrail := na
+
+var label lbNYwin = na
+if showExplain and inNY
+    if na(lbNYwin)
+        lbNYwin := label.new(x=bar_index, y=high, text="NY window open: breakouts happen now.", style=label.style_label_down, color=color.new(color.blue, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbNYwin, bar_index, high)
+else if not na(lbNYwin)
+    label.delete(lbNYwin)
+    lbNYwin := na
+
+var label lbFix = na
+if showExplain and inFix
+    if na(lbFix)
+        lbFix := label.new(x=bar_index, y=high, text="FIX window: sharp snap moves, be careful.", style=label.style_label_down, color=color.new(color.purple, 60), textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(lbFix, bar_index, high)
+else if not na(lbFix)
+    label.delete(lbFix)
+    lbFix := na
+
 // ===== PLOTS =====
 plot(showLevels ? vwap : na, "VWAP", color.purple, 1)
 plot(showLevels ? ema20 : na, "EMA20", color.blue, 1)
@@ -414,8 +509,8 @@ plot(showLevels and (MODE == "DAY" or MODE == "SCALP") and nyBuilt ? nyL : na, "
 plot(showLevels and MODE == "DAY" and ldnBuilt ? ldnH : na, "LDN ORB H", color.new(color.green, 60), 1, plot.style_linebr)
 plot(showLevels and MODE == "DAY" and ldnBuilt ? ldnL : na, "LDN ORB L", color.new(color.red, 60), 1, plot.style_linebr)
 
-plotshape(longConf, title="Long", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), size=size.small, text="L", textcolor=color.white)
-plotshape(shortConf, title="Short", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), size=size.small, text="S", textcolor=color.white)
+plotshape(longConf, title="Long", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), size=size.small, text="BUY", textcolor=color.white)
+plotshape(shortConf, title="Short", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), size=size.small, text="SELL", textcolor=color.white)
 plotshape(preLongEdge, title="Pre-Long", style=shape.diamond, location=location.belowbar, color=color.new(color.orange, 0), size=size.tiny, text="SOON")
 plotshape(preShortEdge, title="Pre-Short", style=shape.diamond, location=location.abovebar, color=color.new(color.orange, 0), size=size.tiny, text="SOON")
 
