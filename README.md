@@ -172,7 +172,7 @@ Change it anytime: indicator gear icon → Inputs → Panel position → Top Lef
 | Row | Meaning | How a usual trader reads it |
 |-----|---------|------------------------------|
 | GQS MODE | Which engine is running | SCALP on M1/M5, DAY on M15/H1, SWING on H4/D1. Switching chart timeframe switches the engine. |
-| Regime | Big-picture permission | BULL = look for longs. BEAR = look for shorts. NEUTRAL = both fine. MIXED-SKIP = price and yields disagree \u2192 swing engine sits out. Silence IS the signal. |
+| Regime | Big-picture permission | BULL = look for longs. BEAR = look for shorts. NEUTRAL = both fine. MIXED-SKIP = price and yields disagree → swing engine sits out. Silence IS the signal. |
 | DXY | Dollar filter | "DOWN pro-Gold" = dollar weak, longs get green light. "UP anti-Gold" = shorts get green light. Every signal already obeys it. |
 | ATR | Volatility in Gold dollars | If ATR reads 4.20 on M15, expect ~$4 wiggle per candle. A $2 target is realistic; $25 is fantasy. |
 | Signal | The live trade, if any | FLAT = nothing on. LONG/SHORT + entry + SL = confirmed setup, boxes are on the chart. |
@@ -181,37 +181,37 @@ Change it anytime: indicator gear icon → Inputs → Panel position → Top Lef
 
 ### 2. Every trade follows 3 steps
 
-**Step 1 \u2014 SOON (orange diamond + orange label + dotted lines). PREPARE.**
+**Step 1 — SOON (orange diamond + orange label + dotted lines). PREPARE.**
 Price entered the trigger zone: stretched far from VWAP, near the ORB/Donchian edge, or near the pullback EMA. Dotted lines show PROJECTED entry / SL / TP1 / TP2 *if* it confirms. Your job: check spread (scalps: under $0.35), check the news clock (no CPI/NFP/FOMC within 15 min), decide risk %. Do not enter.
 
-**Step 2 \u2014 L / S triangle (green/red label + solid boxes). EXECUTE on the CLOSE.**
+**Step 2 — L / S triangle (green/red label + solid boxes). EXECUTE on the CLOSE.**
 A bar CLOSED through the trigger. Entry = market on close, or limit at the blue dashed entry line. The label prints exact E / SL / TP1 / TP2. One signal = one trade; a new signal replaces the old boxes.
 
-**Step 3 \u2014 Manage by color.**
-- Red box (entry to SL): your risk, visualized. SL hit \u2192 panel flips to FLAT. Take it, next.
+**Step 3 — Manage by color.**
+- Red box (entry to SL): your risk, visualized. SL hit → panel flips to FLAT. Take it, next.
 - Green box (entry to TP1, 1.5R): first target. Usual rule: bank half here or move SL to breakeven.
 - Teal box (TP1 to TP2, 2R): the runner. Let it work.
-- Orange line: trailing stop. Moves only in your favor, never back. Price comes back to it after a run \u2192 move is over, exit by hand.
+- Orange line: trailing stop. Moves only in your favor, never back. Price comes back to it after a run → move is over, exit by hand.
 
-Past signals stay on chart as small triangles (confirmed) and diamonds (warnings). Boxes and lines always show the ACTIVE trade only \u2014 clean chart, no clutter.
+Past signals stay on chart as small triangles (confirmed) and diamonds (warnings). Boxes and lines always show the ACTIVE trade only — clean chart, no clutter.
 
 ### 3. What each style looks like
 
-- **Scalping (M5):** Mostly "VWAP FADE" after Gold stretches far from the purple VWAP line, and "MICRO BRK" around 09:30\u201310:00 New York. Blue background tint = NY window (breakouts live here). Purple tint = London Fix window (stretched moves snap back here).
-- **Day (M15/H1):** "H1 PB" = touched the H1 trend line and bounced with the dollar agreeing. "NY/LDN ORB" = first-hour range broke with volatility expanding. House rule: ONE orb trade per session \u2014 the second break of the same box is usually a trap.
-- **Swing (H4/D1):** "DON20" = daily close outside the 20-day range, a new leg may be starting. Expect a few small losses before the big one \u2014 that is the design, not failure. "H4 PB" = pullback entry inside a confirmed regime.
+- **Scalping (M5):** Mostly "VWAP FADE" after Gold stretches far from the purple VWAP line, and "MICRO BRK" around 09:30–10:00 New York. Blue background tint = NY window (breakouts live here). Purple tint = London Fix window (stretched moves snap back here).
+- **Day (M15/H1):** "H1 PB" = touched the H1 trend line and bounced with the dollar agreeing. "NY/LDN ORB" = first-hour range broke with volatility expanding. House rule: ONE orb trade per session — the second break of the same box is usually a trap.
+- **Swing (H4/D1):** "DON20" = daily close outside the 20-day range, a new leg may be starting. Expect a few small losses before the big one — that is the design, not failure. "H4 PB" = pullback entry inside a confirmed regime.
 
 ### 4. Alerts (so you don't babysit charts)
 
-Alert clock icon \u2192 Condition: "Gold Quant Stack - XAUUSD [Quant Tanvir] [v6]" \u2192 "Any alert() function call" \u2192 Create. Two message types arrive: ADVANCE (get ready) and LONG/SHORT (triggered, with E/SL/TP1/TP2/trail prices). One alert per chart/timeframe you trade.
+Alert clock icon → Condition: "Gold Quant Stack - XAUUSD [Quant Tanvir] [v6]" → "Any alert() function call" → Create. Two message types arrive: ADVANCE (get ready) and LONG/SHORT (triggered, with E/SL/TP1/TP2/trail prices). One alert per chart/timeframe you trade.
 
 ### 5. Five mistakes that blow up usual traders
 
 1. Entering on SOON. It's a heads-up, not a trade. Wait for the triangle.
 2. Widening SL because "it'll come back". The red box is the math of the whole system.
 3. Taking the second ORB break. First = trade. Second = watch.
-4. Scalping into red news. NFP/CPI/FOMC within 15 min \u2192 hands off keyboard.
-5. Timeframe-hopping mid-trade to find comfort. The engine already adapts to your chart \u2014 trust the chart you're on.
+4. Scalping into red news. NFP/CPI/FOMC within 15 min → hands off keyboard.
+5. Timeframe-hopping mid-trade to find comfort. The engine already adapts to your chart — trust the chart you're on.
 
 ---
 
