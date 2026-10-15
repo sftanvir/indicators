@@ -18,9 +18,10 @@
 // Symbols: OANDA:XAUUSD / TVC:GOLD / FX:XAUUSD. Alerts: create alert, pick
 //   condition "Gold Quant Stack" -> "Any alert() function call".
 // Spread filter lives in the MT5 EA (Pine cannot read live spread).
+// Author: Quant Tanvir
 // Not financial advice.
 // ============================================================================
-indicator("Gold Quant Stack - XAUUSD [v6]", shorttitle="GQS XAU v6", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=500, calc_on_every_tick=true)
+indicator("Gold Quant Stack - XAUUSD [Quant Tanvir] [v6]", shorttitle="GQS XAU v6", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500, max_bars_back=500)
 
 // ===== INPUTS =====
 string modeSel    = input.string("Auto", "Mode", options=["Auto", "Scalp", "Day", "Swing"], group="Mode")
@@ -421,7 +422,7 @@ bgcolor(inNY ? color.new(color.blue, 92) : na, title="NY ORB window")
 bgcolor(inFix ? color.new(color.purple, 88) : na, title="Fix window")
 
 // ===== DASHBOARD =====
-var table dash = table.new(position.top_right, 2, 6, border_width=1, border_color=color.gray)
+var table dash = table.new(position.top_right, 2, 7, border_width=1, border_color=color.gray)
 if showDash and barstate.islast
     string regimeTxt = bullRegime and bearRegime ? "NEUTRAL" : bullRegime ? "BULL" : bearRegime ? "BEAR" : "MIXED-SKIP"
     color regimeBg = bullRegime and not bearRegime ? color.new(color.green, 80) : bearRegime and not bullRegime ? color.new(color.red, 80) : color.new(color.gray, 80)
@@ -441,6 +442,8 @@ if showDash and barstate.islast
     table.cell(dash, 1, 4, sigTxt, text_color=color.white, bgcolor=sigDir == 1 ? color.new(color.green, 20) : sigDir == -1 ? color.new(color.red, 20) : color.new(color.black, 0), text_size=size.small)
     table.cell(dash, 0, 5, "Advance", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
     table.cell(dash, 1, 5, preTxt, text_color=color.white, bgcolor=preDir != 0 ? color.new(color.orange, 20) : color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 0, 6, "Quant", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
+    table.cell(dash, 1, 6, "Quant Tanvir", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.small)
 
 // ===== ALERTS (TV alert dialog -> "Any alert() function call") =====
 if longConf
