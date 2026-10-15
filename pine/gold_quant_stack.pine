@@ -32,6 +32,7 @@ bool   showBoxes  = input.bool(true, "Show TP/SL boxes", group="Display")
 bool   showTrail  = input.bool(true, "Show trail line", group="Display")
 bool   showLevels = input.bool(true, "Show VWAP / ORB / Donchian lines", group="Display")
 bool   showDash   = input.bool(true, "Show dashboard", group="Display")
+string panelPos   = input.string("Top Right", "Panel position", options=["Top Left", "Top Right", "Bottom Left", "Bottom Right"], group="Display")
 int    atrLen     = input.int(14, "ATR length", minval=2, group="Params")
 float  zTrig      = input.float(2.0, "VWAP Z trigger", step=0.1, group="Params")
 float  zPre       = input.float(1.5, "VWAP Z pre-signal", step=0.1, group="Params")
@@ -422,7 +423,8 @@ bgcolor(inNY ? color.new(color.blue, 92) : na, title="NY ORB window")
 bgcolor(inFix ? color.new(color.purple, 88) : na, title="Fix window")
 
 // ===== DASHBOARD =====
-var table dash = table.new(position.top_right, 2, 7, border_width=1, border_color=color.gray)
+string dashPos = panelPos == "Top Left" ? position.top_left : panelPos == "Top Right" ? position.top_right : panelPos == "Bottom Left" ? position.bottom_left : position.bottom_right
+var table dash = table.new(dashPos, 2, 7, border_width=1, border_color=color.gray)
 if showDash and barstate.islast
     string regimeTxt = bullRegime and bearRegime ? "NEUTRAL" : bullRegime ? "BULL" : bearRegime ? "BEAR" : "MIXED-SKIP"
     color regimeBg = bullRegime and not bearRegime ? color.new(color.green, 80) : bearRegime and not bullRegime ? color.new(color.red, 80) : color.new(color.gray, 80)
