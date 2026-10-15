@@ -148,4 +148,17 @@ RSI divergence alone, MACD cross, default Bollinger bands, grid/martingale, fixe
 
 ---
 
+## 9. PINE INDICATOR (v6) — DELIVERED
+
+File: `pine/gold_quant_stack.pine` — mega-script, all 5 quants in one. `//@version=6`.
+
+- Auto mode by chart TF: M1/M5 = SCALP (VWAP Z fade + 0930-1000 ET micro momentum), M15/H1 = DAY (H1 pullback + NY/LDN ORB), H4/D1 = SWING (Donchian 20 + H4 pullback + Real-Yield regime). Manual override in Inputs.
+- Advance: orange diamond + "SOON" label with PROJECTED entry/SL/TP1/TP2 (dotted lines), fires 1-3 candles before trigger zone break.
+- Confirmed: on bar CLOSE only (no repaint). Triangle + label with E/SL/TP1/TP2, R-boxes (SL red / TP1 green / TP2 teal), dashed blue entry line, orange ratcheting trail line (Donchian 10 / EMA50 / 3xATR).
+- Overlay: DXY inverse confirm (TVC:DXY) on every signal. Regime: FRED:DFII10 + Daily 50 SMA. Dashboard top-right: mode, regime, DXY, ATR, active signal, advance state.
+- Load: TradingView → Pine Editor → paste file → Add to chart on OANDA:XAUUSD / TVC:GOLD / FX:XAUUSD. Alerts: create alert → condition "Gold Quant Stack" → "Any alert() function call". Bodies already include E/SL/TP1/TP2/trail.
+- Note: spread filter lives in the MT5 EA (Pine cannot read live spread). Keep $0.35 spread rule manually on scalps.
+
+---
+
 *Quant Tanvir stack. To the point. No repaint, no FOMO, no martingale.*
